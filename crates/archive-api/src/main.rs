@@ -2,6 +2,7 @@ mod replay;
 mod search;
 mod diff;
 mod semantic;
+mod federation;
 
 use axum::{
     extract::{Query, Path, State},
@@ -20,14 +21,21 @@ use chrono::Utc;
 use sqlx::PgPool;
 use crate::replay::{Resolver, WarcReader, Rewriter};
 use crate::search::SearchService;
+use archive_federation::PeerManager;
 use opensearch::http::transport::Transport;
 use opensearch::OpenSearch;
+
+struct AppConfig {
+    node_id: String,
+}
 
 struct AppState {
     pool: PgPool,
     resolver: Resolver,
     warc_reader: WarcReader,
     search_service: SearchService,
+    peer_manager: PeerManager,
+    config: AppConfig,
 }
 
 #[derive(Deserialize)]
@@ -115,11 +123,15 @@ async fn main() -> anyhow::Result<()> {
     let transport = Transport::single_node(&opensearch_url)?;
     let os_client = OpenSearch::new(transport);
 
+    let node_id = std::env::var("NODE_ID").unwrap_or_else(|_| Uuid::new_v4().to_string());
+
     let state = Arc::new(AppState {
         pool: pool.clone(),
         resolver: Resolver::new(pool),
         warc_reader: WarcReader::new(s3_endpoint),
         search_service: SearchService::new(os_client),
+        peer_manager: PeerManager::new(node_id.clone()),
+        config: AppConfig { node_id },
     });
 
     let v1_api = Router::new()
@@ -128,7 +140,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/timeline", get(get_timeline))
         .route("/resolve", get(resolve_v1))
         .route("/semantic", get(semantic::get_semantic_change))
-        .route("/diff", get(get_diff));
+        .route("/diff", get(get_diff))
+        .route("/federation/peers", get(federation::get_peers))
+        .route("/federation/handshake", post(federation::handle_handshake));
 
     let app = Router::new()
         .route("/", get(|| async { "ArchiveStream API v0.1.0" }))

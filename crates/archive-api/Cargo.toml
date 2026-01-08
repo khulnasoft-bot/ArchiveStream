@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 archive-common = { path = "../common" }
 archive-semantic = { path = "../semantic" }
+archive-federation = { path = "../federation" }
 axum.workspace = true
 tokio.workspace = true
 serde.workspace = true

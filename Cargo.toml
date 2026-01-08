@@ -5,6 +5,7 @@ members = [
     "crates/common",
     "crates/indexer",
     "crates/semantic",
+    "crates/federation",
 ]
 resolver = "2"
 
