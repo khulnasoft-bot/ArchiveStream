@@ -6,9 +6,9 @@ use axum::{
 use std::sync::Arc;
 use crate::{AppState, DiffQuery};
 use crate::diff::DiffService;
-use archive_semantic::{Classifier, ClassificationResult};
+use archive_semantic::Classifier;
 use archive_common::replay::ReplayUrl;
-use axum::response::Response;
+use axum::http::StatusCode;
 
 pub async fn get_semantic_change(
     State(state): State<Arc<AppState>>,
@@ -17,18 +17,18 @@ pub async fn get_semantic_change(
     // 1. Resolve snapshots (reuse logic from diff)
     let ts_from = match ReplayUrl::parse(&params.from, &params.url) {
         Ok(u) => u.timestamp,
-        Err(_) => return Response::builder().status(400).body("Invalid FROM timestamp".into()).unwrap().into_response(),
+        Err(_) => return (StatusCode::BAD_REQUEST, "Invalid FROM timestamp").into_response(),
     };
     let ts_to = match ReplayUrl::parse(&params.to, &params.url) {
         Ok(u) => u.timestamp,
-        Err(_) => return Response::builder().status(400).body("Invalid TO timestamp".into()).unwrap().into_response(),
+        Err(_) => return (StatusCode::BAD_REQUEST, "Invalid TO timestamp").into_response(),
     };
 
     let s1 = state.resolver.resolve(&params.url, ts_from).await.ok().flatten();
     let s2 = state.resolver.resolve(&params.url, ts_to).await.ok().flatten();
 
     if s1.is_none() || s2.is_none() {
-        return Response::builder().status(404).body("Snapshots not found".into()).unwrap().into_response();
+        return (StatusCode::NOT_FOUND, "Snapshots not found").into_response();
     }
 
     let s1 = s1.unwrap();
@@ -48,13 +48,13 @@ pub async fn get_semantic_change(
     let mut removed_text = String::new();
 
     for change in diff.changes {
-        match change.change_type.as_str() {
-            "insert" => {
-                added_text.push_str(&change.text);
+        match change.tag.as_str() {
+            "added" => {
+                added_text.push_str(&change.value);
                 added_text.push(' ');
             }
-            "delete" => {
-                removed_text.push_str(&change.text);
+            "removed" => {
+                removed_text.push_str(&change.value);
                 removed_text.push(' ');
             }
             _ => {}

@@ -6,6 +6,7 @@ pub struct WarcRecord {
     pub timestamp: chrono::DateTime<Utc>,
     pub content: Vec<u8>,
     pub content_type: String,
+    pub status_code: u16,
     pub payload_digest: String,
 }
 

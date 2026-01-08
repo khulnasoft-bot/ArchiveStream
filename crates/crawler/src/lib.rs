@@ -19,8 +19,11 @@ pub struct Crawler {
     fetcher: Fetcher,
     dedup: DedupService,
     frontier: FrontierService,
+    #[allow(dead_code)]
     region: Region,
+    #[allow(dead_code)]
     region_router: RegionRouter,
+    #[allow(dead_code)]
     rate_limiter: RateLimiter,
 }
 

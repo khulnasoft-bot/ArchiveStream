@@ -16,7 +16,7 @@ impl WarcReader {
         }
     }
 
-    pub async fn read_record(&self, filename: &str, offset: u64, length: u64) -> Result<Bytes> {
+    pub async fn read_record(&self, filename: &str, offset: i64, length: i64) -> Result<Bytes> {
         let url = format!("{}/{}", self.base_url, filename);
         
         let response = self.client

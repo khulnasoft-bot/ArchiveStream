@@ -19,3 +19,4 @@ lol_html.workspace = true
 scraper = "0.18"
 url.workspace = true
 reqwest.workspace = true
+http = "1.0"

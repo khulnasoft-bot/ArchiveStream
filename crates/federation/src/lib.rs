@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use dashmap::DashMap;
 use chrono::{DateTime, Utc};
-use anyhow::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Peer {
@@ -67,4 +66,74 @@ impl PeerManager {
             "peers": self.get_active_peers()
         })
     }
+
+    /// Broadcast a search query to all active peers
+    pub async fn broadcast_search(&self, query: &FederatedQuery) -> Vec<FederatedSearchResult> {
+        let peers = self.get_active_peers();
+        let client = reqwest::Client::new();
+        let mut tasks = vec![];
+
+        for peer in peers {
+            let client = client.clone();
+            let q = query.clone();
+            tasks.push(tokio::spawn(async move {
+                // Assuming peer endpoint is the base URL like "http://10.0.0.1:3000"
+                let url = format!("{}/api/v1/search", peer.endpoint);
+                
+                match client.get(&url)
+                    .query(&[("q", &q.query)])
+                    .timeout(std::time::Duration::from_secs(2))
+                    .send()
+                    .await 
+                {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            match resp.json::<Vec<serde_json::Value>>().await {
+                                Ok(results) => Some(FederatedSearchResult {
+                                    source_node_id: peer.id,
+                                    results,
+                                }),
+                                Err(_) => None,
+                            }
+                        } else {
+                            None
+                        }
+                    }
+                    Err(_) => None,
+                }
+            }));
+        }
+
+        let mut all_results = vec![];
+        for task in tasks {
+            if let Ok(Some(res)) = task.await {
+                all_results.push(res);
+            }
+        }
+        all_results
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederatedQuery {
+    pub query: String,
+    pub max_instances: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FederatedSearchResult {
+    pub source_node_id: String,
+    pub results: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManifestRequest {
+    pub from: Option<DateTime<Utc>>,
+    pub to: Option<DateTime<Utc>>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManifestResponse {
+    pub snapshots: Vec<archive_common::Snapshot>,
 }

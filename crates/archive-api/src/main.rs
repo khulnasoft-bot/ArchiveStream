@@ -9,6 +9,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
     response::{IntoResponse, Response},
+    http::StatusCode,
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -25,17 +26,17 @@ use archive_federation::PeerManager;
 use opensearch::http::transport::Transport;
 use opensearch::OpenSearch;
 
-struct AppConfig {
-    node_id: String,
+pub struct AppConfig {
+    pub node_id: String,
 }
 
-struct AppState {
-    pool: PgPool,
-    resolver: Resolver,
-    warc_reader: WarcReader,
-    search_service: SearchService,
-    peer_manager: PeerManager,
-    config: AppConfig,
+pub struct AppState {
+    pub pool: PgPool,
+    pub resolver: Resolver,
+    pub warc_reader: WarcReader,
+    pub search_service: SearchService,
+    pub peer_manager: PeerManager,
+    pub config: AppConfig,
 }
 
 #[derive(Deserialize)]
@@ -85,8 +86,10 @@ struct OutcomeMetric {
 #[derive(Deserialize)]
 struct SnapshotsQuery {
     url: String,
-    from: Option<String>,
-    to: Option<String>,
+    #[allow(dead_code)]
+    pub from: Option<String>,
+    #[allow(dead_code)]
+    pub to: Option<String>,
     limit: Option<i64>,
 }
 
@@ -104,7 +107,7 @@ struct ResolveResponse {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
     
     tracing_subscriber::registry()
@@ -142,6 +145,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/semantic", get(semantic::get_semantic_change))
         .route("/diff", get(get_diff))
         .route("/federation/peers", get(federation::get_peers))
+        .route("/federation/search", get(federation::search_federated))
+        .route("/federation/manifest", get(federation::get_manifest))
         .route("/federation/handshake", post(federation::handle_handshake));
 
     let app = Router::new()
@@ -156,9 +161,17 @@ async fn main() -> anyhow::Result<()> {
         .route("/health/outcomes", get(get_outcomes))
         .route("/snapshots", get(get_snapshots_v1))
         .route("/snapshot/:id", get(get_snapshot))
+        .route("/snapshot/:id/download", get(federation::download_snapshot))
         .route("/crawl", post(start_crawl))
         .route("/web/:timestamp/*url", get(replay_handler))
-        .with_state(state);
+        .with_state(state.clone());
+
+    // Spawn Federation Sync Worker
+    let sync_state = state.clone();
+    tokio::spawn(async move {
+        let worker = federation::SyncWorker::new(sync_state);
+        worker.run_loop().await;
+    });
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
     tracing::info!("listening on {}", addr);
@@ -173,24 +186,28 @@ async fn get_timeline(
     State(state): State<Arc<AppState>>,
     Query(params): Query<TimelineQuery>,
 ) -> impl IntoResponse {
-    let result = sqlx::query!(
+    let rows = sqlx::query(
         r#"
-        SELECT timestamp, status_code as "status_code!", sha256
+        SELECT timestamp, status_code, sha256
         FROM snapshots
         WHERE url = $1
         ORDER BY timestamp ASC
-        "#,
-        params.url
+        "#
     )
+    .bind(&params.url)
     .fetch_all(&state.pool)
     .await;
 
-    match result {
+    match rows {
         Ok(rows) => {
-            let snapshots = rows.into_iter().map(|row| TimelineSnapshot {
-                timestamp: row.timestamp,
-                status: row.status_code as u16,
-                digest: row.sha256,
+            use sqlx::Row;
+            let snapshots = rows.into_iter().map(|row| {
+                let status_code: i16 = row.get("status_code");
+                TimelineSnapshot {
+                    timestamp: row.get("timestamp"),
+                    status: status_code as u16,
+                    digest: row.get("sha256"),
+                }
             }).collect();
             
             Json(TimelineResponse {
@@ -200,7 +217,7 @@ async fn get_timeline(
         }
         Err(e) => {
             tracing::error!("Timeline error: {}", e);
-            Response::builder().status(500).body("Timeline failed".into()).unwrap()
+            (StatusCode::INTERNAL_SERVER_ERROR, "Timeline failed").into_response()
         }
     }
 }
@@ -215,18 +232,18 @@ async fn get_diff(
     // Resolve snapshots for both timestamps
     let ts_from = match ReplayUrl::parse(&params.from, &params.url) {
         Ok(u) => u.timestamp,
-        Err(_) => return Response::builder().status(400).body("Invalid FROM timestamp".into()).unwrap(),
+        Err(_) => return (StatusCode::BAD_REQUEST, "Invalid FROM timestamp").into_response(),
     };
     let ts_to = match ReplayUrl::parse(&params.to, &params.url) {
         Ok(u) => u.timestamp,
-        Err(_) => return Response::builder().status(400).body("Invalid TO timestamp".into()).unwrap(),
+        Err(_) => return (StatusCode::BAD_REQUEST, "Invalid TO timestamp").into_response(),
     };
 
     let s1 = state.resolver.resolve(&params.url, ts_from).await.ok().flatten();
     let s2 = state.resolver.resolve(&params.url, ts_to).await.ok().flatten();
 
     if s1.is_none() || s2.is_none() {
-        return Response::builder().status(404).body("One or both snapshots not found".into()).unwrap();
+        return (StatusCode::NOT_FOUND, "One or both snapshots not found").into_response();
     }
 
     let s1 = s1.unwrap();
@@ -246,9 +263,9 @@ async fn get_diff(
 async fn get_frontier_health(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    let result = sqlx::query!(
+    let rows = sqlx::query(
         r#"
-        SELECT domain as "domain!", COUNT(*) as "count!", MIN(depth) as "min_depth!", MAX(depth) as "max_depth!"
+        SELECT domain, COUNT(*) as count, MIN(depth) as min_depth, MAX(depth) as max_depth
         FROM url_frontier
         GROUP BY domain
         ORDER BY count DESC
@@ -258,18 +275,24 @@ async fn get_frontier_health(
     .fetch_all(&state.pool)
     .await;
 
-    match result {
+    match rows {
         Ok(rows) => {
-            let health = rows.into_iter().map(|row| FrontierHealth {
-                domain: row.domain,
-                count: row.count,
-                depth_range: (row.min_depth, row.max_depth),
+            use sqlx::Row;
+            let health = rows.into_iter().map(|row| {
+                let count: i64 = row.get("count");
+                let min_depth: i32 = row.get("min_depth");
+                let max_depth: i32 = row.get("max_depth");
+                FrontierHealth {
+                    domain: row.get("domain"),
+                    count,
+                    depth_range: (min_depth, max_depth),
+                }
             }).collect::<Vec<_>>();
             Json(health).into_response()
         }
         Err(e) => {
             tracing::error!("Health error: {}", e);
-            Response::builder().status(500).body("Health failed".into()).unwrap()
+            (StatusCode::INTERNAL_SERVER_ERROR, "Health failed").into_response()
         }
     }
 }
@@ -277,9 +300,9 @@ async fn get_frontier_health(
 async fn get_outcomes(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    let result = sqlx::query!(
+    let rows = sqlx::query(
         r#"
-        SELECT status as "status!", COUNT(*) as "count!"
+        SELECT status, COUNT(*) as count
         FROM crawl_events
         WHERE timestamp > NOW() - interval '24 hours'
         GROUP BY status
@@ -288,17 +311,18 @@ async fn get_outcomes(
     .fetch_all(&state.pool)
     .await;
 
-    match result {
+    match rows {
         Ok(rows) => {
+            use sqlx::Row;
             let metrics = rows.into_iter().map(|row| OutcomeMetric {
-                status: row.status,
-                count: row.count,
+                status: row.get("status"),
+                count: row.get("count"),
             }).collect::<Vec<_>>();
             Json(metrics).into_response()
         }
         Err(e) => {
             tracing::error!("Outcomes error: {}", e);
-            Response::builder().status(500).body("Outcomes failed".into()).unwrap()
+            (StatusCode::INTERNAL_SERVER_ERROR, "Outcomes failed").into_response()
         }
     }
 }
@@ -309,15 +333,15 @@ async fn replay_handler(
 ) -> impl IntoResponse {
     let replay_url = match ReplayUrl::parse(&timestamp_str, &url_str) {
         Ok(u) => u,
-        Err(_) => return Response::builder().status(400).body("Invalid timestamp or URL".into()).unwrap(),
+        Err(_) => return (StatusCode::BAD_REQUEST, "Invalid timestamp or URL").into_response(),
     };
 
     let snapshot = match state.resolver.resolve(&replay_url.original_url, replay_url.timestamp).await {
         Ok(Some(s)) => s,
-        Ok(None) => return Response::builder().status(404).body("Snapshot not found".into()).unwrap(),
+        Ok(None) => return (StatusCode::NOT_FOUND, "Snapshot not found").into_response(),
         Err(e) => {
             tracing::error!("DB Error: {}", e);
-            return Response::builder().status(500).body("Internal Server Error".into()).unwrap();
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response();
         }
     };
 
@@ -325,7 +349,7 @@ async fn replay_handler(
         Ok(d) => d,
         Err(e) => {
             tracing::error!("Storage Error: {}", e);
-            return Response::builder().status(500).body("Error reading archive".into()).unwrap();
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Error reading archive").into_response();
         }
     };
 
@@ -335,16 +359,18 @@ async fn replay_handler(
         let rewritten_body = rewriter.rewrite_html(&raw_data);
         
         Response::builder()
-            .status(snapshot.status_code)
+            .status(StatusCode::from_u16(snapshot.status_code as u16).unwrap_or(StatusCode::OK))
             .header("Content-Type", "text/html")
-            .body(rewritten_body.into())
+            .body(axum::body::Body::from(rewritten_body))
             .unwrap()
+            .into_response()
     } else {
         Response::builder()
-            .status(snapshot.status_code)
+            .status(StatusCode::from_u16(snapshot.status_code as u16).unwrap_or(StatusCode::OK))
             .header("Content-Type", snapshot.content_type)
-            .body(raw_data.into())
+            .body(axum::body::Body::from(raw_data))
             .unwrap()
+            .into_response()
     }
 }
 
@@ -356,7 +382,7 @@ async fn global_search(
         Ok(results) => Json(results).into_response(),
         Err(e) => {
             tracing::error!("Search error: {}", e);
-            Response::builder().status(500).body("Search failed".into()).unwrap()
+            (StatusCode::INTERNAL_SERVER_ERROR, "Search failed").into_response()
         }
     }
 }
@@ -379,10 +405,10 @@ async fn resolve_v1(
                 replay_url: format!("/web/{}/{}", actual_ts, params.url),
             }).into_response()
         }
-        Ok(None) => Response::builder().status(404).body("No snapshot found for given URL and time".into()).unwrap(),
+        Ok(None) => (StatusCode::NOT_FOUND, "No snapshot found for given URL and time").into_response(),
         Err(e) => {
             tracing::error!("Resolve error: {}", e);
-            Response::builder().status(500).body("Internal error".into()).unwrap()
+            (StatusCode::INTERNAL_SERVER_ERROR, "Internal error").into_response()
         }
     }
 }
@@ -394,18 +420,18 @@ async fn get_snapshots_v1(
     let limit = params.limit.unwrap_or(50);
     
     // Simple query: in v2 we would add date range filters
-    let result = sqlx::query_as!(
-        Snapshot,
+    // Simple query: in v2 we would add date range filters
+    let result = sqlx::query_as::<_, Snapshot>(
         r#"
-        SELECT id, url, timestamp, warc_file, offset, length, sha256, status_code as "status_code!", content_type, payload_hash
+        SELECT id, url, timestamp, warc_file, offset, length, sha256, status_code, content_type, payload_hash
         FROM snapshots
         WHERE url = $1
         ORDER BY timestamp DESC
         LIMIT $2
-        "#,
-        params.url,
-        limit
+        "#
     )
+    .bind(&params.url)
+    .bind(limit)
     .fetch_all(&state.pool)
     .await;
 
@@ -413,35 +439,34 @@ async fn get_snapshots_v1(
         Ok(snapshots) => Json(snapshots).into_response(),
         Err(e) => {
             tracing::error!("Snapshots error: {}", e);
-            Response::builder().status(500).body("Error fetching snapshots".into()).unwrap()
+            (StatusCode::INTERNAL_SERVER_ERROR, "Error fetching snapshots").into_response()
         }
     }
 }
 
 async fn get_snapshot(Path(id): Path<Uuid>, State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let result = sqlx::query_as!(
-        Snapshot,
+    let result = sqlx::query_as::<_, Snapshot>(
         r#"
-        SELECT id, url, timestamp, warc_file, offset, length, sha256, status_code as "status_code!", content_type, payload_hash
+        SELECT id, url, timestamp, warc_file, offset, length, sha256, status_code, content_type, payload_hash
         FROM snapshots
         WHERE id = $1
-        "#,
-        id
+        "#
     )
+    .bind(id)
     .fetch_optional(&state.pool)
     .await;
 
     match result {
         Ok(Some(s)) => Json(s).into_response(),
-        Ok(None) => Response::builder().status(404).body("Snapshot not found").unwrap().into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "Snapshot not found").into_response(),
         Err(e) => {
             tracing::error!("Snapshot error: {}", e);
-            Response::builder().status(500).body("Error fetching snapshot").unwrap().into_response()
+            (StatusCode::INTERNAL_SERVER_ERROR, "Error fetching snapshot").into_response()
         }
     }
 }
 
-async fn start_crawl(State(state): State<Arc<AppState>>, Json(payload): Json<serde_json::Value>) -> Json<serde_json::Value> {
+async fn start_crawl(State(_state): State<Arc<AppState>>, Json(payload): Json<serde_json::Value>) -> Json<serde_json::Value> {
     // Basic crawl trigger (placeholder logic)
     let url = payload.get("url").and_then(|v| v.as_str()).unwrap_or("");
     tracing::info!("Starting crawl for: {}", url);

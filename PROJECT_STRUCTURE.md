@@ -52,6 +52,11 @@ ArchiveStream/
 │   │   │   │   └── alert.rs               # Alert system (future)
 │   │   │   └── Cargo.toml
 │   │   │
+│   │   ├── federation/                    # Federation & Sync
+│   │   │   ├── src/
+│   │   │   │   └── lib.rs                 # PeerManager & Protocols
+│   │   │   └── Cargo.toml
+│   │   │
 │   │   ├── intelligence/                  # ML/LLM Engine
 │   │   │   ├── src/
 │   │   │   │   └── lib.rs                 # Engine traits & Logic

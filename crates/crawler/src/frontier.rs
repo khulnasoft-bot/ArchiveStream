@@ -1,6 +1,6 @@
 use sqlx::PgPool;
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use url::Url;
 
 pub struct FrontierService {
@@ -22,13 +22,13 @@ impl FrontierService {
     pub async fn add_url(&self, url: &str, priority: i32, depth: i32) -> Result<()> {
         let domain = Url::parse(url).ok().and_then(|u| u.domain().map(|d| d.to_string()));
         
-        sqlx::query!(
-            "INSERT INTO url_frontier (url, domain, priority, depth) VALUES ($1, $2, $3, $4) ON CONFLICT (url) DO NOTHING",
-            url,
-            domain,
-            priority,
-            depth
+        sqlx::query(
+            "INSERT INTO url_frontier (url, domain, priority, depth) VALUES ($1, $2, $3, $4) ON CONFLICT (url) DO NOTHING"
         )
+        .bind(url)
+        .bind(domain)
+        .bind(priority)
+        .bind(depth)
         .execute(&self.pool)
         .await?;
         
@@ -36,8 +36,7 @@ impl FrontierService {
     }
 
     pub async fn claim_urls(&self, limit: i32) -> Result<Vec<FrontierUrl>> {
-        let urls = sqlx::query_as!(
-            FrontierUrl,
+        let urls = sqlx::query_as::<_, FrontierUrl>(
             r#"
             UPDATE url_frontier
             SET leased_until = now() + interval '1 minute'
@@ -49,10 +48,10 @@ impl FrontierService {
                 LIMIT $1
                 FOR UPDATE SKIP LOCKED
             )
-            RETURNING url, domain, depth as "depth!"
-            "#,
-            limit as i64
+            RETURNING url, domain, depth
+            "#
         )
+        .bind(limit as i64)
         .fetch_all(&self.pool)
         .await?;
 
@@ -60,7 +59,8 @@ impl FrontierService {
     }
 
     pub async fn complete(&self, url: &str) -> Result<()> {
-        sqlx::query!("DELETE FROM url_frontier WHERE url = $1", url)
+        sqlx::query("DELETE FROM url_frontier WHERE url = $1")
+            .bind(url)
             .execute(&self.pool)
             .await?;
         Ok(())
@@ -68,11 +68,11 @@ impl FrontierService {
 
     pub async fn fail(&self, url: &str, backoff_seconds: i64) -> Result<()> {
         let next_fetch = Utc::now() + chrono::Duration::seconds(backoff_seconds);
-        sqlx::query!(
-            "UPDATE url_frontier SET fetch_attempts = fetch_attempts + 1, next_fetch_at = $1, leased_until = NULL WHERE url = $2",
-            next_fetch,
-            url
+        sqlx::query(
+            "UPDATE url_frontier SET fetch_attempts = fetch_attempts + 1, next_fetch_at = $1, leased_until = NULL WHERE url = $2"
         )
+        .bind(next_fetch)
+        .bind(url)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -80,14 +80,14 @@ impl FrontierService {
 
     pub async fn track_event(&self, url: &str, status: &str, http_status: Option<i32>, duration_ms: i32) -> Result<()> {
         let domain = Url::parse(url).ok().and_then(|u| u.domain().map(|d| d.to_string())).unwrap_or_default();
-        sqlx::query!(
-            "INSERT INTO crawl_events (domain, url, status, http_status, duration_ms) VALUES ($1, $2, $3, $4, $5)",
-            domain,
-            url,
-            status,
-            http_status,
-            duration_ms
+        sqlx::query(
+            "INSERT INTO crawl_events (domain, url, status, http_status, duration_ms) VALUES ($1, $2, $3, $4, $5)"
         )
+        .bind(domain)
+        .bind(url)
+        .bind(status)
+        .bind(http_status)
+        .bind(duration_ms)
         .execute(&self.pool)
         .await?;
         Ok(())

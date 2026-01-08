@@ -1,6 +1,5 @@
 use similar::{TextDiff, ChangeTag};
 use serde::Serialize;
-use anyhow::Result;
 use archive_common::extractor::extract_text;
 
 #[derive(Serialize)]

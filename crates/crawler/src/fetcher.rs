@@ -1,5 +1,8 @@
 use sha2::{Sha256, Digest};
 use futures::StreamExt;
+use reqwest::Client;
+use crate::warc::WarcRecord;
+use bytes::Bytes;
 
 pub struct Fetcher {
     client: Client,
@@ -32,7 +35,7 @@ impl Fetcher {
         let mut stream = response.bytes_stream();
 
         while let Some(item) = stream.next().await {
-            let chunk = item?;
+            let chunk: Bytes = item?;
             hasher.update(&chunk);
             content.extend_from_slice(&chunk);
         }
@@ -44,6 +47,7 @@ impl Fetcher {
             timestamp: chrono::Utc::now(),
             content,
             content_type,
+            status_code: status.as_u16(),
             payload_digest,
         })
     }

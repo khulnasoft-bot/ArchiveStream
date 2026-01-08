@@ -11,3 +11,4 @@ uuid.workspace = true
 url.workspace = true
 scraper.workspace = true
 anyhow.workspace = true
+sqlx.workspace = true

@@ -16,7 +16,7 @@ Get ArchiveStream running in **5 minutes**.
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/your-org/archivestream.git
+git clone https://github.com/ArchiveStream/archivestream.git
 cd archivestream
 
 # 2. Copy environment file
@@ -49,7 +49,7 @@ That's it! ArchiveStream is now running.
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/your-org/archivestream.git
+git clone https://github.com/ArchiveStream/archivestream.git
 cd archivestream
 
 # 2. Start infrastructure

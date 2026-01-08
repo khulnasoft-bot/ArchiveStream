@@ -4,23 +4,21 @@ use uuid::Uuid;
 
 pub mod extractor;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, sqlx::FromRow)]
 pub struct Snapshot {
     pub id: Uuid,
     pub url: String,
     pub timestamp: DateTime<Utc>,
     pub warc_file: String,
-    pub offset: u64,
-    pub length: u64,
+    pub offset: i64,
+    pub length: i64,
     pub sha256: String,
-    pub status_code: u16,
+    pub status_code: i16,
     pub content_type: String,
     pub payload_hash: Option<String>,
 }
 
-pub mod warc {
-    // WARC related utilities will go here
-}
+pub mod warc;
 
 pub mod replay {
     use chrono::{DateTime, Utc, NaiveDateTime};

@@ -48,10 +48,9 @@ impl SearchClient {
     pub async fn index_snapshots(&self, docs: Vec<Value>) -> Result<()> {
         if docs.is_empty() { return Ok(()); }
 
-        let mut body = Vec::new();
+        let mut body: Vec<opensearch::BulkOperation<Value>> = Vec::new();
         for doc in docs {
-            body.push(json!({ "index": { "_index": "snapshots", "_id": doc["snapshot_id"] } }));
-            body.push(doc);
+            body.push(opensearch::BulkOperation::index(doc).into());
         }
 
         self.client

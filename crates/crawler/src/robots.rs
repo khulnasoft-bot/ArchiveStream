@@ -1,4 +1,4 @@
-use robots_txt::Robots;
+use robotstxt::DefaultMatcher;
 use reqwest::Client;
 use tracing::warn;
 
@@ -21,23 +21,22 @@ impl RobotsChecker {
 
         let robots_url = match url.join("/robots.txt") {
             Ok(u) => u,
-            Err(_) => return true, // Fallback to allowing if robots.txt URL is invalid
+            Err(_) => return true,
         };
 
-        match self.client.get(robots_url).send().await {
+        match self.client.get(robots_url.clone()).send().await {
             Ok(resp) => {
                 if resp.status().is_success() {
                     let text = resp.text().await.unwrap_or_default();
-                    let robots = Robots::from_str(&text);
-                    // Match against ArchiveStream user agent
-                    robots.allowed(url_str, "ArchiveStream")
+                    let mut matcher = DefaultMatcher::default();
+                    matcher.one_agent_allowed_by_robots(&text, "ArchiveStream", url_str)
                 } else {
-                    true // If no robots.txt, assume allowed
+                    true
                 }
             }
             Err(e) => {
                 warn!("Failed to fetch robots.txt for {}: {}", url_str, e);
-                true // Fallback to allowed on network error
+                true
             }
         }
     }

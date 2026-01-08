@@ -30,7 +30,7 @@ impl Rewriter {
                         }
                         Ok(())
                     }),
-                    element!("style", |el| {
+                    element!("style", |_el| {
                         // TODO: Implement CSS rewrite for inline styles
                         Ok(())
                     })

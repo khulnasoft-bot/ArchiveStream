@@ -1,10 +1,9 @@
 mod opensearch_client;
 
-use archive_common::extractor::extract_text;
+use archive_common::extractor;
 
 use opensearch_client::SearchClient;
 use sqlx::PgPool;
-use std::sync::Arc;
 use tracing::{info, error};
 use archive_common::Snapshot;
 use serde_json::json;
@@ -40,13 +39,12 @@ async fn process_pending_snapshots(pool: &PgPool, search_client: &SearchClient) 
     // 1. Get unindexed HTML snapshots
     // Note: In real setup, we'd need to add 'indexed_at' column to DB. 
     // For this design, we'll assume it exists or we use a temporary set of IDs.
-    let snapshots = sqlx::query_as!(
-        Snapshot,
+    let snapshots = sqlx::query_as::<_, Snapshot>(
         r#"
         SELECT s.id, s.url, s.timestamp, 
-               COALESCE(p.warc_path, s.warc_file) as "warc_file!",
-               COALESCE(p.warc_offset, s.offset) as "offset!",
-               s.length as "length!", s.sha256, s.status_code as "status_code!", s.content_type,
+               COALESCE(p.warc_path, s.warc_file) as warc_file,
+               COALESCE(p.warc_offset, s.offset) as offset,
+               s.length, s.sha256, s.status_code, s.content_type,
                s.payload_hash
         FROM snapshots s
         LEFT JOIN payloads p ON s.payload_hash = p.hash

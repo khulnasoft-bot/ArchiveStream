@@ -44,42 +44,44 @@ impl RateLimiter {
     }
 
     async fn get_count(&self, domain: &str, region: &str, window_start: chrono::DateTime<Utc>) -> Result<i32> {
-        let result = sqlx::query!(
-            "SELECT request_count FROM rate_limits WHERE domain = $1 AND region = $2 AND window_start = $3",
-            domain,
-            region,
-            window_start
+        let result = sqlx::query(
+            "SELECT request_count FROM rate_limits WHERE domain = $1 AND region = $2 AND window_start = $3"
         )
+        .bind(domain)
+        .bind(region)
+        .bind(window_start)
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(result.map(|r| r.request_count).unwrap_or(0))
+        use sqlx::Row;
+        Ok(result.map(|r| r.get::<i32, _>("request_count")).unwrap_or(0))
     }
 
     async fn get_global_count(&self, domain: &str, window_start: chrono::DateTime<Utc>) -> Result<i32> {
-        let result = sqlx::query!(
-            "SELECT SUM(request_count) as total FROM rate_limits WHERE domain = $1 AND window_start = $2",
-            domain,
-            window_start
+        let result = sqlx::query(
+            "SELECT SUM(request_count) as total FROM rate_limits WHERE domain = $1 AND window_start = $2"
         )
+        .bind(domain)
+        .bind(window_start)
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(result.total.unwrap_or(0) as i32)
+        use sqlx::Row;
+        Ok(result.get::<Option<i64>, _>("total").unwrap_or(0) as i32)
     }
 
     async fn increment(&self, domain: &str, region: &str, window_start: chrono::DateTime<Utc>) -> Result<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO rate_limits (domain, region, window_start, request_count)
             VALUES ($1, $2, $3, 1)
             ON CONFLICT (domain, region, window_start)
             DO UPDATE SET request_count = rate_limits.request_count + 1
-            "#,
-            domain,
-            region,
-            window_start
+            "#
         )
+        .bind(domain)
+        .bind(region)
+        .bind(window_start)
         .execute(&self.pool)
         .await?;
 
@@ -96,10 +98,10 @@ impl RateLimiter {
     /// Cleanup old rate limit windows (run periodically)
     pub async fn cleanup_old_windows(&self) -> Result<()> {
         let cutoff = Utc::now() - Duration::hours(1);
-        sqlx::query!(
-            "DELETE FROM rate_limits WHERE window_start < $1",
-            cutoff
+        sqlx::query(
+            "DELETE FROM rate_limits WHERE window_start < $1"
         )
+        .bind(cutoff)
         .execute(&self.pool)
         .await?;
 
