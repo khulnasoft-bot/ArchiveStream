@@ -1,31 +1,48 @@
 # Rust
 target/
+**/*.rs.bk
+*.pdb
 Cargo.lock
 
-# Node.js
+# Node
 node_modules/
 .next/
+out/
 dist/
-.env*
-!.env.example
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# OS
-.DS_Store
-Thumbs.db
+# Environment
+.env
+.env.local
+.env.production
 
-# Docker
-.docker/
-
-# IDEs
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+.DS_Store
 
-# Project specific
-archive-data/
-postgres-data/
+# Database
+*.db
+*.sqlite
+
+# Build artifacts
+*.wasm
+*.so
+*.dylib
+*.dll
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+.cache/
+tmp/
+temp/

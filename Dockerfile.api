@@ -1,0 +1,41 @@
+# Multi-stage build for ArchiveStream API
+FROM rust:1.75-slim as builder
+
+WORKDIR /app
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+# Build release binary
+RUN cargo build --release --bin archive-api
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/target/release/archive-api /usr/local/bin/archive-api
+
+# Expose API port
+EXPOSE 3001
+
+# Set environment
+ENV RUST_LOG=info
+ENV API_PORT=3001
+ENV API_HOST=0.0.0.0
+
+# Run API
+CMD ["archive-api"]

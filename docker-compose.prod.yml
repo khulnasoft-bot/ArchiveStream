@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  # Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: archivestream-postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: archivestream
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U admin" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: archivestream-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Search Engine
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: archivestream-opensearch
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - DISABLE_SECURITY_PLUGIN=true
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Crawler (Region: us-east-1)
+  crawler-us-east-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.crawler
+    container_name: archivestream-crawler-us-east-1
+    environment:
+      DATABASE_URL: postgresql://admin:password@postgres:5432/archivestream
+      S3_ENDPOINT: http://minio:9000
+      REGION: us-east-1
+      RUST_LOG: info,archive_crawler=debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Indexer
+  indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile.indexer
+    container_name: archivestream-indexer
+    environment:
+      DATABASE_URL: postgresql://admin:password@postgres:5432/archivestream
+      OPENSEARCH_URL: http://opensearch:9200
+      RUST_LOG: info,archive_indexer=debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: archivestream-api
+    environment:
+      DATABASE_URL: postgresql://admin:password@postgres:5432/archivestream
+      S3_ENDPOINT: http://minio:9000
+      OPENSEARCH_URL: http://opensearch:9200
+      API_PORT: 3001
+      API_HOST: 0.0.0.0
+      RUST_LOG: info,archive_api=debug
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # UI
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: archivestream-ui
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  minio_data:
+  opensearch_data:
+
+
+networks:
+  default:
+    name: archivestream-network
