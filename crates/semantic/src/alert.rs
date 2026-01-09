@@ -1,5 +1,5 @@
+use crate::classifier::{ClassificationResult, SemanticCategory};
 use serde::{Deserialize, Serialize};
-use crate::classifier::{SemanticCategory, ClassificationResult};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,7 +18,10 @@ pub struct AlertRule {
 pub enum NotificationChannel {
     Email(String),
     Webhook(String),
-    Slack { channel: String, webhook_url: String },
+    Slack {
+        channel: String,
+        webhook_url: String,
+    },
 }
 
 pub struct AlertEngine {
@@ -34,8 +37,10 @@ impl AlertEngine {
         let mut triggered = Vec::new();
 
         for rule in &self.rules {
-            if !rule.active { continue; }
-            
+            if !rule.active {
+                continue;
+            }
+
             // 1. Check URL Pattern (simplified glob-to-regex or exact for now)
             if !url.contains(&rule.url_pattern) && rule.url_pattern != "*" {
                 continue;

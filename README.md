@@ -69,7 +69,8 @@ cd archivestream
 docker-compose up -d
 
 # Run database migrations
-psql $DATABASE_URL < infra/migrations/*.sql
+cargo install sqlx-cli --no-default-features --features postgres
+sqlx migrate run --source infra/migrations
 
 # Build and run
 cargo build --release

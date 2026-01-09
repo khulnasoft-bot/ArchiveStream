@@ -1,8 +1,8 @@
-use sha2::{Sha256, Digest};
-use futures::StreamExt;
-use reqwest::Client;
 use crate::warc::WarcRecord;
 use bytes::Bytes;
+use futures::StreamExt;
+use reqwest::Client;
+use sha2::{Digest, Sha256};
 
 pub struct Fetcher {
     client: Client,
@@ -27,7 +27,7 @@ impl Fetcher {
             .and_then(|h| h.to_str().ok())
             .unwrap_or("text/html")
             .to_string();
-        
+
         // Streaming body to compute hash without buffering everything if possible
         // Actually, for WARC record we need the full content too.
         let mut hasher = Sha256::new();
@@ -41,7 +41,7 @@ impl Fetcher {
         }
 
         let payload_digest = format!("{:x}", hasher.finalize());
-        
+
         Ok(WarcRecord {
             url: url.to_string(),
             timestamp: chrono::Utc::now(),
@@ -50,5 +50,11 @@ impl Fetcher {
             status_code: status.as_u16(),
             payload_digest,
         })
+    }
+}
+
+impl Default for Fetcher {
+    fn default() -> Self {
+        Self::new()
     }
 }

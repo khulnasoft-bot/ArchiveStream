@@ -1,5 +1,6 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::str::FromStr; // Add this line
 
 /// Regions supported by ArchiveStream
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,20 +19,25 @@ impl Region {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "us-east-1" => Some(Region::UsEast1),
-            "eu-west-1" => Some(Region::EuWest1),
-            "ap-south-1" => Some(Region::ApSouth1),
-            _ => None,
-        }
-    }
-
     pub fn from_env() -> Self {
         std::env::var("REGION")
             .ok()
-            .and_then(|r| Self::from_str(&r))
+            .and_then(|r| Region::from_str(&r).ok()) // Use the FromStr implementation
             .unwrap_or(Region::UsEast1)
+    }
+}
+
+// Implement FromStr trait for Region
+impl FromStr for Region {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "us-east-1" => Ok(Region::UsEast1),
+            "eu-west-1" => Ok(Region::EuWest1),
+            "ap-south-1" => Ok(Region::ApSouth1),
+            _ => Err(anyhow::anyhow!("Invalid region: {}", s)),
+        }
     }
 }
 
@@ -52,7 +58,7 @@ impl RegionRouter {
         let mut hasher = DefaultHasher::new();
         domain.hash(&mut hasher);
         let hash = hasher.finish();
-        
+
         let index = (hash as usize) % self.regions.len();
         self.regions[index].clone()
     }
@@ -76,7 +82,7 @@ mod tests {
     #[test]
     fn test_consistent_routing() {
         let router = RegionRouter::new();
-        
+
         // Same domain should always route to same region
         let domain = "example.com";
         let region1 = router.route_domain(domain);
@@ -88,16 +94,20 @@ mod tests {
     fn test_distribution() {
         let router = RegionRouter::new();
         let domains: Vec<String> = (0..1000).map(|i| format!("domain{}.com", i)).collect();
-        
+
         let mut counts = std::collections::HashMap::new();
         for domain in domains {
             let region = router.route_domain(&domain);
             *counts.entry(region.as_str()).or_insert(0) += 1;
         }
-        
+
         // Rough distribution check (should be ~333 each)
         for count in counts.values() {
-            assert!(*count > 250 && *count < 400, "Distribution skewed: {}", count);
+            assert!(
+                *count > 250 && *count < 400,
+                "Distribution skewed: {}",
+                count
+            );
         }
     }
 }

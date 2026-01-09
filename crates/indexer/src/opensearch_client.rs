@@ -1,10 +1,6 @@
-use opensearch::{
-    indices::IndicesCreateParts,
-    http::transport::Transport,
-    OpenSearch, BulkParts,
-};
-use serde_json::{json, Value};
 use anyhow::Result;
+use opensearch::{http::transport::Transport, indices::IndicesCreateParts, BulkParts, OpenSearch};
+use serde_json::{json, Value};
 
 pub struct SearchClient {
     client: OpenSearch,
@@ -19,8 +15,15 @@ impl SearchClient {
 
     pub async fn ensure_index(&self) -> Result<()> {
         let index_name = "snapshots";
-        let exists = self.client.indices().exists(opensearch::indices::IndicesExistsParts::Index(&[index_name])).send().await?;
-        
+        let exists = self
+            .client
+            .indices()
+            .exists(opensearch::indices::IndicesExistsParts::Index(&[
+                index_name,
+            ]))
+            .send()
+            .await?;
+
         if exists.status_code() == http::StatusCode::NOT_FOUND {
             self.client
                 .indices()
@@ -41,12 +44,14 @@ impl SearchClient {
                 .send()
                 .await?;
         }
-        
+
         Ok(())
     }
 
     pub async fn index_snapshots(&self, docs: Vec<Value>) -> Result<()> {
-        if docs.is_empty() { return Ok(()); }
+        if docs.is_empty() {
+            return Ok(());
+        }
 
         let mut body: Vec<opensearch::BulkOperation<Value>> = Vec::new();
         for doc in docs {

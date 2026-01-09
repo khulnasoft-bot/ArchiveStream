@@ -1,5 +1,5 @@
-pub mod classifier;
 pub mod alert;
+pub mod classifier;
 
-pub use classifier::{Classifier, SemanticCategory, ClassificationResult};
-pub use alert::{AlertRule, AlertEngine};
+pub use alert::{AlertEngine, AlertRule};
+pub use classifier::{ClassificationResult, Classifier, SemanticCategory};

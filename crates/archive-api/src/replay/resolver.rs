@@ -1,7 +1,7 @@
-use sqlx::PgPool;
+use anyhow::Result;
 use archive_common::Snapshot;
 use chrono::{DateTime, Utc};
-use anyhow::Result;
+use sqlx::PgPool;
 
 pub struct Resolver {
     pool: PgPool,
@@ -26,7 +26,7 @@ impl Resolver {
             WHERE s.url = $1 AND s.timestamp <= $2
             ORDER BY s.timestamp DESC
             LIMIT 1
-            "#
+            "#,
         )
         .bind(url)
         .bind(timestamp)

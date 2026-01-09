@@ -14,6 +14,8 @@ serde_json.workspace = true
 tracing.workspace = true
 anyhow.workspace = true
 async-trait = "0.1"
+sqlx.workspace = true
+chrono.workspace = true
 
 # Optional: Add candle or rust-bert later for local inference
 # For now, we define the interfaces

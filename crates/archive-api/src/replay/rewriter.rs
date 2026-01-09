@@ -1,6 +1,6 @@
-use lol_html::{element, HtmlRewriter, Settings};
 use archive_common::replay::ReplayUrl;
 use chrono::{DateTime, Utc};
+use lol_html::{element, HtmlRewriter, Settings};
 use url::Url;
 
 pub struct Rewriter {
@@ -10,45 +10,58 @@ pub struct Rewriter {
 
 impl Rewriter {
     pub fn new(timestamp: DateTime<Utc>, base_url: String) -> Self {
-        Self { timestamp, base_url }
+        Self {
+            timestamp,
+            base_url,
+        }
     }
 
     pub fn rewrite_html(&self, html_content: &[u8]) -> Vec<u8> {
         let mut output = Vec::new();
-        
+
         let mut rewriter = HtmlRewriter::new(
             Settings {
                 element_content_handlers: vec![
-                    element!("a[href], img[src], script[src], link[href], form[action]", |el| {
-                        let attr_name = if el.has_attribute("href") { "href" }
-                            else if el.has_attribute("src") { "src" }
-                            else { "action" };
+                    element!(
+                        "a[href], img[src], script[src], link[href], form[action]",
+                        |el| {
+                            let attr_name = if el.has_attribute("href") {
+                                "href"
+                            } else if el.has_attribute("src") {
+                                "src"
+                            } else {
+                                "action"
+                            };
 
-                        if let Some(attr_val) = el.get_attribute(attr_name) {
-                            let rewritten = self.rewrite_url(&attr_val);
-                            el.set_attribute(attr_name, &rewritten).ok();
+                            if let Some(attr_val) = el.get_attribute(attr_name) {
+                                let rewritten = self.rewrite_url(&attr_val);
+                                el.set_attribute(attr_name, &rewritten).ok();
+                            }
+                            Ok(())
                         }
-                        Ok(())
-                    }),
+                    ),
                     element!("style", |_el| {
                         // TODO: Implement CSS rewrite for inline styles
                         Ok(())
-                    })
+                    }),
                 ],
                 ..Settings::default()
             },
-            |c: &[u8]| output.extend_from_slice(c)
+            |c: &[u8]| output.extend_from_slice(c),
         );
 
         rewriter.write(html_content).unwrap();
         rewriter.end().unwrap();
-        
+
         output
     }
 
     fn rewrite_url(&self, target_url: &str) -> String {
         // Skip data URIs, fragments, etc.
-        if target_url.starts_with("data:") || target_url.starts_with('#') || target_url.starts_with("javascript:") {
+        if target_url.starts_with("data:")
+            || target_url.starts_with('#')
+            || target_url.starts_with("javascript:")
+        {
             return target_url.to_string();
         }
 
@@ -59,7 +72,7 @@ impl Rewriter {
             };
             return replay.format();
         }
-        
+
         target_url.to_string()
     }
 

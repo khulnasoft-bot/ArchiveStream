@@ -1,6 +1,6 @@
-use similar::{TextDiff, ChangeTag};
-use serde::Serialize;
 use archive_common::extractor::extract_text;
+use serde::Serialize;
+use similar::{ChangeTag, TextDiff};
 
 #[derive(Serialize)]
 pub struct DiffResult {
@@ -31,7 +31,7 @@ impl DiffService {
         let to_text = extract_text(to_html).text_content;
 
         let diff = TextDiff::from_lines(&from_text, &to_text);
-        
+
         let mut added = 0;
         let mut removed = 0;
         let mut unchanged = 0;
@@ -42,15 +42,15 @@ impl DiffService {
                 ChangeTag::Delete => {
                     removed += 1;
                     "removed".to_string()
-                },
+                }
                 ChangeTag::Insert => {
                     added += 1;
                     "added".to_string()
-                },
+                }
                 ChangeTag::Equal => {
                     unchanged += 1;
                     "equal".to_string()
-                },
+                }
             };
             changes.push(DiffChange {
                 tag,
@@ -61,7 +61,11 @@ impl DiffService {
         DiffResult {
             from_timestamp: from_ts.to_string(),
             to_timestamp: to_ts.to_string(),
-            summary: DiffSummary { added, removed, unchanged },
+            summary: DiffSummary {
+                added,
+                removed,
+                unchanged,
+            },
             changes,
         }
     }

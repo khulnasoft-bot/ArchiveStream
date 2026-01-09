@@ -1,11 +1,15 @@
+use archive_semantic::{alert::NotificationChannel, ClassificationResult};
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use archive_semantic::{NotificationChannel, ClassificationResult};
-use tracing::{info, error};
+use tracing::info;
 
 #[async_trait]
 pub trait NotificationDispatcher: Send + Sync {
-    async fn dispatch(&self, url: &str, result: &ClassificationResult, channel: &NotificationChannel) -> anyhow::Result<()>;
+    async fn dispatch(
+        &self,
+        url: &str,
+        result: &ClassificationResult,
+        channel: &NotificationChannel,
+    ) -> anyhow::Result<()>;
 }
 
 pub struct MultiChannelDispatcher {
@@ -20,19 +24,24 @@ impl MultiChannelDispatcher {
     }
 
     async fn send_webhook(&self, endpoint: &str, payload: serde_json::Value) -> anyhow::Result<()> {
-        let resp = self.client.post(endpoint)
-            .json(&payload)
-            .send()
-            .await?;
-        
+        let resp = self.client.post(endpoint).json(&payload).send().await?;
+
         if resp.status().is_success() {
             Ok(())
         } else {
-            Err(anyhow::anyhow!("Webhook failed with status: {}", resp.status()))
+            Err(anyhow::anyhow!(
+                "Webhook failed with status: {}",
+                resp.status()
+            ))
         }
     }
 
-    async fn send_slack(&self, webhook_url: &str, url: &str, result: &ClassificationResult) -> anyhow::Result<()> {
+    async fn send_slack(
+        &self,
+        webhook_url: &str,
+        url: &str,
+        result: &ClassificationResult,
+    ) -> anyhow::Result<()> {
         let payload = serde_json::json!({
             "text": format!("🔔 *ArchiveStream Alert* for <{}|{}>", url, url),
             "blocks": [
@@ -63,9 +72,20 @@ impl MultiChannelDispatcher {
     }
 }
 
+impl Default for MultiChannelDispatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl NotificationDispatcher for MultiChannelDispatcher {
-    async fn dispatch(&self, url: &str, result: &ClassificationResult, channel: &NotificationChannel) -> anyhow::Result<()> {
+    async fn dispatch(
+        &self,
+        url: &str,
+        result: &ClassificationResult,
+        channel: &NotificationChannel,
+    ) -> anyhow::Result<()> {
         match channel {
             NotificationChannel::Webhook(endpoint) => {
                 info!("Dispatching Webhook to {}", endpoint);

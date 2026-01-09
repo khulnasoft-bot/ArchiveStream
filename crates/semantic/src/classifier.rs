@@ -1,7 +1,7 @@
-use serde::Serialize;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum SemanticCategory {
     PrivacyPolicy,
     PriceChange,
@@ -11,7 +11,7 @@ pub enum SemanticCategory {
     Unknown,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct ClassificationResult {
     pub categories: Vec<SemanticCategory>,
     pub summary: String,
@@ -29,7 +29,8 @@ impl Classifier {
         Self {
             privacy_regex: Regex::new(r"(?i)(privacy|policy|terms|cookie|consent)").unwrap(),
             price_regex: Regex::new(r"(?i)(\$|price|cost|usd|eur|gbp)").unwrap(),
-            news_regex: Regex::new(r"(?i)(breaking|announced|acquisition|official|breaking next)").unwrap(),
+            news_regex: Regex::new(r"(?i)(breaking|announced|acquisition|official|breaking next)")
+                .unwrap(),
         }
     }
 

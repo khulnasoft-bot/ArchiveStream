@@ -1,5 +1,5 @@
-use robotstxt::DefaultMatcher;
 use reqwest::Client;
+use robotstxt::DefaultMatcher;
 use tracing::warn;
 
 pub struct RobotsChecker {

@@ -15,7 +15,7 @@ impl WarcRecord {
         let record_id = Uuid::new_v4();
         let timestamp = self.timestamp.format("%Y-%m-%dT%H:%M:%SZ").to_string();
         let warc_type = if is_revisit { "revisit" } else { "response" };
-        
+
         format!(
             "WARC/1.0\r\n\
             WARC-Type: {}\r\n\

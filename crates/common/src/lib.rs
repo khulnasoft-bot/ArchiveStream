@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub mod extractor;
@@ -21,7 +21,7 @@ pub struct Snapshot {
 pub mod warc;
 
 pub mod replay {
-    use chrono::{DateTime, Utc, NaiveDateTime};
+    use chrono::{DateTime, NaiveDateTime, Utc};
     use serde::{Deserialize, Serialize};
     use url::Url;
 
@@ -33,12 +33,11 @@ pub mod replay {
 
     impl ReplayUrl {
         pub fn parse(timestamp_str: &str, url_str: &str) -> anyhow::Result<Self> {
-            let timestamp = NaiveDateTime::parse_from_str(timestamp_str, "%Y%m%d%H%M%S")?
-                .and_utc();
-            
+            let timestamp = NaiveDateTime::parse_from_str(timestamp_str, "%Y%m%d%H%M%S")?.and_utc();
+
             // Validate URL
             let _ = Url::parse(url_str)?;
-            
+
             Ok(Self {
                 timestamp,
                 original_url: url_str.to_string(),

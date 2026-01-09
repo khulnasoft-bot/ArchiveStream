@@ -73,7 +73,7 @@ dev:
 # Format code
 fmt:
 	cargo fmt
-	cd apps/web-ui && npm run format
+	cd apps/web-ui && npm install && npm run format
 
 # Run linters
 lint:

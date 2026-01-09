@@ -1,7 +1,7 @@
 use chrono::Utc;
-use uuid::Uuid;
-use std::io::Write;
 use std::fs::OpenOptions;
+use std::io::Write;
+use uuid::Uuid;
 
 pub struct WarcRecord {
     pub url: String,
@@ -15,7 +15,7 @@ impl WarcRecord {
     pub fn to_warc_bytes(&self) -> Vec<u8> {
         let record_id = Uuid::new_v4();
         let timestamp = self.timestamp.format("%Y-%m-%dT%H:%M:%SZ").to_string();
-        
+
         let header = format!(
             "WARC/1.0\r\n\
             WARC-Type: response\r\n\
@@ -59,7 +59,7 @@ impl WarcWriter {
         let pos = file.metadata()?.len();
         let bytes = record.to_warc_bytes();
         file.write_all(&bytes)?;
-        
+
         Ok((pos, bytes.len() as u64))
     }
 }

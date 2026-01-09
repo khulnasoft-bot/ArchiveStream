@@ -1,7 +1,7 @@
+use chrono::{DateTime, Utc};
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use dashmap::DashMap;
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Peer {
@@ -79,12 +79,13 @@ impl PeerManager {
             tasks.push(tokio::spawn(async move {
                 // Assuming peer endpoint is the base URL like "http://10.0.0.1:3000"
                 let url = format!("{}/api/v1/search", peer.endpoint);
-                
-                match client.get(&url)
+
+                match client
+                    .get(&url)
                     .query(&[("q", &q.query)])
                     .timeout(std::time::Duration::from_secs(2))
                     .send()
-                    .await 
+                    .await
                 {
                     Ok(resp) => {
                         if resp.status().is_success() {

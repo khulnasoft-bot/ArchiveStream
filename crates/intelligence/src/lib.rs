@@ -1,5 +1,7 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisResult {
@@ -21,7 +23,7 @@ pub trait IntelligenceEngine: Send + Sync {
 
     /// Generate a vector embedding for the given text (for semantic search)
     async fn embed(&self, text: &str) -> anyhow::Result<Vec<f32>>;
-    
+
     /// Summarize the difference between two text blocks
     async fn summarize_diff(&self, old_text: &str, new_text: &str) -> anyhow::Result<String>;
 }
@@ -38,16 +40,17 @@ pub struct CrawlPrediction {
 #[async_trait]
 pub trait PredictiveEngine: Send + Sync {
     /// Predict the best time to recrawl a URL based on its change history
-    async fn predict_next_crawl(&self, history: &[SnapshotHistory]) -> anyhow::Result<CrawlPrediction>;
+    async fn predict_next_crawl(
+        &self,
+        history: &[SnapshotHistory],
+    ) -> anyhow::Result<CrawlPrediction>;
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SnapshotHistory {
     pub timestamp: DateTime<Utc>,
     pub content_hash: String,
 }
-
-
 
 /// A pass-through engine that uses our existing regex-based logic
 /// but wraps it in the new Intelligence interface.
@@ -57,23 +60,27 @@ pub struct RuleBasedEngine;
 impl IntelligenceEngine for RuleBasedEngine {
     async fn analyze(&self, text: &str) -> anyhow::Result<AnalysisResult> {
         let classifier = archive_semantic::Classifier::new();
-        // The rule-based classifier expects added/removed text. 
+        // The rule-based classifier expects added/removed text.
         // For a single block, we treat it as all added.
         let result = classifier.classify(text, "");
-        
+
         Ok(AnalysisResult {
             summary: Some(result.summary),
-            categories: result.categories.into_iter().map(|c| ScoredCategory {
-                name: format!("{:?}", c),
-                confidence: result.confidence,
-            }).collect(),
+            categories: result
+                .categories
+                .into_iter()
+                .map(|c| ScoredCategory {
+                    name: format!("{:?}", c),
+                    confidence: result.confidence,
+                })
+                .collect(),
             sentiment: None,
         })
     }
 
     async fn embed(&self, _text: &str) -> anyhow::Result<Vec<f32>> {
         // Rule-based engine cannot produce embeddings
-        Ok(vec![]) 
+        Ok(vec![])
     }
 
     async fn summarize_diff(&self, _old_text: &str, _new_text: &str) -> anyhow::Result<String> {
@@ -108,7 +115,8 @@ impl IntelligenceEngine for LLMIntelligenceEngine {
             text.chars().take(2000).collect::<String>()
         );
 
-        let resp = client.post(format!("{}/chat/completions", self.endpoint))
+        let resp = client
+            .post(format!("{}/chat/completions", self.endpoint))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&serde_json::json!({
                 "model": self.model,
@@ -119,15 +127,18 @@ impl IntelligenceEngine for LLMIntelligenceEngine {
             .await?;
 
         let json: serde_json::Value = resp.json().await?;
-        let content = json["choices"][0]["message"]["content"].as_str().ok_or_else(|| anyhow::anyhow!("Invalid response"))?;
+        let content = json["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid response"))?;
         let result: AnalysisResult = serde_json::from_str(content)?;
-        
+
         Ok(result)
     }
 
     async fn embed(&self, text: &str) -> anyhow::Result<Vec<f32>> {
         let client = reqwest::Client::new();
-        let resp = client.post(format!("{}/embeddings", self.endpoint))
+        let resp = client
+            .post(format!("{}/embeddings", self.endpoint))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&serde_json::json!({
                 "model": "text-embedding-3-small",
@@ -143,7 +154,7 @@ impl IntelligenceEngine for LLMIntelligenceEngine {
             .iter()
             .map(|v| v.as_f64().unwrap_or(0.0) as f32)
             .collect();
-        
+
         Ok(embedding)
     }
 
@@ -155,7 +166,8 @@ impl IntelligenceEngine for LLMIntelligenceEngine {
             new_text.chars().take(1000).collect::<String>()
         );
 
-        let resp = client.post(format!("{}/chat/completions", self.endpoint))
+        let resp = client
+            .post(format!("{}/chat/completions", self.endpoint))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&serde_json::json!({
                 "model": self.model,
@@ -165,10 +177,11 @@ impl IntelligenceEngine for LLMIntelligenceEngine {
             .await?;
 
         let json: serde_json::Value = resp.json().await?;
-        let summary = json["choices"][0]["message"]["content"].as_str()
+        let summary = json["choices"][0]["message"]["content"]
+            .as_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid response"))?
             .to_string();
-            
+
         Ok(summary)
     }
 }
@@ -192,7 +205,7 @@ impl HybridEngine {
 impl IntelligenceEngine for HybridEngine {
     async fn analyze(&self, text: &str) -> anyhow::Result<AnalysisResult> {
         let rb_result = self.rule_based.analyze(text).await?;
-        
+
         if let Some(ref llm) = self.llm {
             // If LLM available, merge results
             match llm.analyze(text).await {
@@ -204,7 +217,7 @@ impl IntelligenceEngine for HybridEngine {
                             categories.push(cat);
                         }
                     }
-                    
+
                     Ok(AnalysisResult {
                         summary: llm_result.summary.or(rb_result.summary),
                         categories,
@@ -243,7 +256,10 @@ pub struct StandardPredictor;
 
 #[async_trait]
 impl PredictiveEngine for StandardPredictor {
-    async fn predict_next_crawl(&self, history: &[SnapshotHistory]) -> anyhow::Result<CrawlPrediction> {
+    async fn predict_next_crawl(
+        &self,
+        history: &[SnapshotHistory],
+    ) -> anyhow::Result<CrawlPrediction> {
         if history.len() < 2 {
             // Not enough data, default to 24 hours
             return Ok(CrawlPrediction {
@@ -264,7 +280,7 @@ impl PredictiveEngine for StandardPredictor {
         for entry in history.iter().skip(1) {
             if entry.content_hash != *last_content_hash {
                 changes += 1;
-                total_interval = total_interval + (entry.timestamp - last_timestamp);
+                total_interval += entry.timestamp - last_timestamp;
                 last_content_hash = &entry.content_hash;
             }
             last_timestamp = entry.timestamp;
@@ -275,7 +291,7 @@ impl PredictiveEngine for StandardPredictor {
             let last_fetch = history.last().unwrap().timestamp;
             let current_age = Utc::now() - last_fetch;
             let next_interval = (current_age * 2).max(chrono::Duration::days(7));
-            
+
             return Ok(CrawlPrediction {
                 url: "".to_string(),
                 next_fetch_at: Utc::now() + next_interval,
@@ -285,8 +301,8 @@ impl PredictiveEngine for StandardPredictor {
             });
         }
 
-        let avg_change_interval = total_interval / (changes as i32);
-        
+        let avg_change_interval = total_interval / changes;
+
         // Schedule next crawl at 80% of average interval to catch changes early
         let next_fetch_delta = (avg_change_interval.num_seconds() as f32 * 0.8) as i64;
         let next_fetch_at = Utc::now() + chrono::Duration::seconds(next_fetch_delta);
@@ -294,11 +310,9 @@ impl PredictiveEngine for StandardPredictor {
         Ok(CrawlPrediction {
             url: "".to_string(),
             next_fetch_at,
-            recommended_priority: (changes * 2).min(10) as i32,
+            recommended_priority: (changes * 2).min(10),
             confidence: (changes as f32 / history.len() as f32).min(0.9),
             change_probability: 0.8,
         })
     }
 }
-
-

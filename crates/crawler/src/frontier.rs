@@ -1,6 +1,6 @@
-use sqlx::PgPool;
 use anyhow::Result;
 use chrono::Utc;
+use sqlx::PgPool;
 use url::Url;
 
 pub struct FrontierService {
@@ -20,8 +20,10 @@ impl FrontierService {
     }
 
     pub async fn add_url(&self, url: &str, priority: i32, depth: i32) -> Result<()> {
-        let domain = Url::parse(url).ok().and_then(|u| u.domain().map(|d| d.to_string()));
-        
+        let domain = Url::parse(url)
+            .ok()
+            .and_then(|u| u.domain().map(|d| d.to_string()));
+
         sqlx::query(
             "INSERT INTO url_frontier (url, domain, priority, depth) VALUES ($1, $2, $3, $4) ON CONFLICT (url) DO NOTHING"
         )
@@ -31,7 +33,7 @@ impl FrontierService {
         .bind(depth)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
 
@@ -49,7 +51,7 @@ impl FrontierService {
                 FOR UPDATE SKIP LOCKED
             )
             RETURNING url, domain, depth
-            "#
+            "#,
         )
         .bind(limit as i64)
         .fetch_all(&self.pool)
@@ -66,7 +68,12 @@ impl FrontierService {
         Ok(())
     }
 
-    pub async fn reschedule(&self, url: &str, next_fetch_at: chrono::DateTime<Utc>, priority: i32) -> Result<()> {
+    pub async fn reschedule(
+        &self,
+        url: &str,
+        next_fetch_at: chrono::DateTime<Utc>,
+        priority: i32,
+    ) -> Result<()> {
         sqlx::query(
             "UPDATE url_frontier SET next_fetch_at = $1, priority = $2, leased_until = NULL, fetch_attempts = 0 WHERE url = $3"
         )
@@ -77,7 +84,6 @@ impl FrontierService {
         .await?;
         Ok(())
     }
-
 
     pub async fn fail(&self, url: &str, backoff_seconds: i64) -> Result<()> {
         let next_fetch = Utc::now() + chrono::Duration::seconds(backoff_seconds);
@@ -91,8 +97,17 @@ impl FrontierService {
         Ok(())
     }
 
-    pub async fn track_event(&self, url: &str, status: &str, http_status: Option<i32>, duration_ms: i32) -> Result<()> {
-        let domain = Url::parse(url).ok().and_then(|u| u.domain().map(|d| d.to_string())).unwrap_or_default();
+    pub async fn track_event(
+        &self,
+        url: &str,
+        status: &str,
+        http_status: Option<i32>,
+        duration_ms: i32,
+    ) -> Result<()> {
+        let domain = Url::parse(url)
+            .ok()
+            .and_then(|u| u.domain().map(|d| d.to_string()))
+            .unwrap_or_default();
         sqlx::query(
             "INSERT INTO crawl_events (domain, url, status, http_status, duration_ms) VALUES ($1, $2, $3, $4, $5)"
         )
@@ -106,16 +121,17 @@ impl FrontierService {
         Ok(())
     }
 
-    pub async fn get_snapshot_history(&self, url: &str) -> Result<Vec<archive_intelligence::SnapshotHistory>> {
+    pub async fn get_snapshot_history(
+        &self,
+        url: &str,
+    ) -> Result<Vec<archive_intelligence::SnapshotHistory>> {
         let history = sqlx::query_as::<_, archive_intelligence::SnapshotHistory>(
             "SELECT timestamp, sha256 as content_hash FROM snapshots WHERE url = $1 ORDER BY timestamp ASC"
         )
         .bind(url)
         .fetch_all(&self.pool)
         .await?;
-        
+
         Ok(history)
     }
 }
-
-

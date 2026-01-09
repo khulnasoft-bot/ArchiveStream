@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "test": "echo \"No tests specified\" && exit 0",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css}\""
   },
   "dependencies": {
     "clsx": "latest",
@@ -20,12 +22,17 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "latest",
+    "@types/pixelmatch": "^5.2.6",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "autoprefixer": "latest",
+    "diff-dom": "^5.2.1",
     "eslint": "latest",
     "eslint-config-next": "latest",
+    "html2canvas": "^1.4.1",
+    "pixelmatch": "^7.1.0",
     "postcss": "latest",
+    "prettier": "^3.7.4",
     "tailwindcss": "latest",
     "typescript": "latest"
   }

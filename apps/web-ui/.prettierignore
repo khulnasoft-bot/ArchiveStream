@@ -1,0 +1,9 @@
+# Ignore artifacts:
+build
+.next
+.turbo
+dist
+.env*.local
+
+# Ignore directories:
+node_modules

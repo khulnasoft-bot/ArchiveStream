@@ -54,11 +54,10 @@ jobs:
         env:
           DATABASE_URL: postgresql://admin:password@localhost:5432/archivestream_test
         run: |
-          cargo install sqlx-cli --no-default-features --features postgres
+          cargo install sqlx-cli --no-default-features --features postgres --force
+          sleep 5
           sqlx database create
-          for migration in infra/migrations/*.sql; do
-            psql $DATABASE_URL < $migration
-          done
+          sqlx migrate run --source infra/migrations
       
       - name: Check formatting
         run: cargo fmt -- --check
@@ -106,6 +105,13 @@ jobs:
   docker-build:
     name: Build Docker Images
     runs-on: ubuntu-latest
+    needs: [docker-build-crawler, docker-build-api, docker-build-indexer, docker-build-ui]
+    steps:
+      - run: echo "All Docker images built successfully"
+
+  docker-build-crawler:
+    name: Build Crawler Image
+    runs-on: ubuntu-latest
     needs: [rust-test, frontend-test]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
     
@@ -131,6 +137,25 @@ jobs:
           tags: ghcr.io/${{ github.repository }}/crawler:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  docker-build-api:
+    name: Build API Image
+    runs-on: ubuntu-latest
+    needs: [rust-test, frontend-test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Build and push API
         uses: docker/build-push-action@v5
@@ -141,6 +166,25 @@ jobs:
           tags: ghcr.io/${{ github.repository }}/api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  docker-build-indexer:
+    name: Build Indexer Image
+    runs-on: ubuntu-latest
+    needs: [rust-test, frontend-test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Build and push Indexer
         uses: docker/build-push-action@v5
@@ -151,6 +195,25 @@ jobs:
           tags: ghcr.io/${{ github.repository }}/indexer:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  docker-build-ui:
+    name: Build UI Image
+    runs-on: ubuntu-latest
+    needs: [rust-test, frontend-test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Build and push UI
         uses: docker/build-push-action@v5

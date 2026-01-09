@@ -1,10 +1,10 @@
+use crate::AppState;
 use axum::{
-    extract::{State, Json, Query, Path},
-    response::IntoResponse,
+    extract::{Json, Path, Query, State},
     http::StatusCode,
+    response::IntoResponse,
 };
 use std::sync::Arc;
-use crate::AppState;
 // use archive_federation::Peer;
 use serde::Deserialize;
 use uuid::Uuid;
@@ -35,14 +35,18 @@ pub async fn search_federated(
 ) -> impl IntoResponse {
     // 1. Local Search
     // Note: search_service.search returns Vec<SearchResult> or similar
-    let local_results = state.search_service.search(&params.q).await.unwrap_or_default();
+    let local_results = state
+        .search_service
+        .search(&params.q)
+        .await
+        .unwrap_or_default();
 
     // 2. Federated Search
     let fed_query = archive_federation::FederatedQuery {
         query: params.q.clone(),
         max_instances: None,
     };
-    
+
     let peer_results = state.peer_manager.broadcast_search(&fed_query).await;
 
     // 3. Return Combined
@@ -60,8 +64,10 @@ pub async fn handle_handshake(
 ) -> impl IntoResponse {
     // In a real implementation, we would verify the node_id and challenge
     // For now, we trust the handshake and add the peer
-    state.peer_manager.add_peer(payload.node_id.clone(), payload.endpoint.clone());
-    
+    state
+        .peer_manager
+        .add_peer(payload.node_id.clone(), payload.endpoint.clone());
+
     tracing::info!("Accepted handshake from peer: {}", payload.node_id);
 
     Json(serde_json::json!({
@@ -77,7 +83,9 @@ pub async fn get_manifest(
     Query(params): Query<archive_federation::ManifestRequest>,
 ) -> impl IntoResponse {
     // Default to last 24 hours if not specified
-    let from_ts = params.from.unwrap_or_else(|| chrono::Utc::now() - chrono::Duration::hours(24));
+    let from_ts = params
+        .from
+        .unwrap_or_else(|| chrono::Utc::now() - chrono::Duration::hours(24));
     let to_ts = params.to.unwrap_or_else(chrono::Utc::now);
     let limit = params.limit.unwrap_or(100) as i64;
 
@@ -122,14 +130,21 @@ pub async fn download_snapshot(
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "DB error").into_response(),
     };
 
-    let data = match state.warc_reader.read_record(&snapshot.warc_file, snapshot.offset, snapshot.length).await {
+    let data = match state
+        .warc_reader
+        .read_record(&snapshot.warc_file, snapshot.offset, snapshot.length)
+        .await
+    {
         Ok(d) => d,
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Read error").into_response(),
     };
 
     axum::response::Response::builder()
         .header("Content-Type", "application/warc-record")
-        .header("Content-Disposition", format!("attachment; filename=\"{}.warc\"", id))
+        .header(
+            "Content-Disposition",
+            format!("attachment; filename=\"{}.warc\"", id),
+        )
         .body(axum::body::Body::from(data))
         .unwrap()
         .into_response()
@@ -163,13 +178,15 @@ impl SyncWorker {
         }
 
         let client = reqwest::Client::new();
-        
+
         for peer in peers {
             // 1. Get Manifest
             let manifest_url = format!("{}/api/v1/federation/manifest?limit=50", peer.endpoint); // simplified
             let resp = client.get(&manifest_url).send().await?;
-            if !resp.status().is_success() { continue; }
-            
+            if !resp.status().is_success() {
+                continue;
+            }
+
             let manifest: archive_federation::ManifestResponse = resp.json().await?;
 
             // 2. Process Snapshots
@@ -180,9 +197,13 @@ impl SyncWorker {
                     .fetch_optional(&self.state.pool)
                     .await?
                     .is_some();
-                
+
                 if !exists {
-                    tracing::info!("Syncing missing snapshot {} from peer {}", remote_snap.id, peer.id);
+                    tracing::info!(
+                        "Syncing missing snapshot {} from peer {}",
+                        remote_snap.id,
+                        peer.id
+                    );
                     self.download_and_save(&client, &peer, &remote_snap).await?;
                 }
             }
@@ -190,20 +211,25 @@ impl SyncWorker {
         Ok(())
     }
 
-    async fn download_and_save(&self, client: &reqwest::Client, peer: &archive_federation::Peer, snap: &archive_common::Snapshot) -> anyhow::Result<()> {
+    async fn download_and_save(
+        &self,
+        client: &reqwest::Client,
+        peer: &archive_federation::Peer,
+        snap: &archive_common::Snapshot,
+    ) -> anyhow::Result<()> {
         let url = format!("{}/api/v1/snapshot/{}/download", peer.endpoint, snap.id);
         let resp = client.get(&url).send().await?;
         let bytes = resp.bytes().await?;
 
         // Write to local WARC
         // For MVP, we just append to a dedicated sync.warc file
-        
+
         // Improve: reconstruct WarcRecord or write raw bytes if WarcWriter supported raw write
         // Since WarcWriter expects WarcRecord, we need to parse the raw bytes or extend WarcWriter.
         // For now, let's assume we implement a write_raw method or parse it.
-        // Actually, easier: The API returns the raw record (headers + body). 
+        // Actually, easier: The API returns the raw record (headers + body).
         // We can just append it to the file directly.
-        
+
         let path = "data/archive/sync.warc";
         if let Some(parent) = std::path::Path::new(path).parent() {
             tokio::fs::create_dir_all(parent).await?;
@@ -213,7 +239,7 @@ impl SyncWorker {
             .create(true)
             .append(true)
             .open(path)?;
-        
+
         let offset = file.metadata()?.len();
         std::io::Write::write_all(&mut file, &bytes)?;
         let length = bytes.len() as u64;

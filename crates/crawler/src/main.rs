@@ -13,7 +13,7 @@ async fn main() -> anyhow::Result<()> {
     let pool = sqlx::PgPool::connect(&database_url).await?;
 
     let crawler = Crawler::new(pool);
-    
+
     // Seed for demo
     let _ = crawler.add_url("https://example.com").await;
 
