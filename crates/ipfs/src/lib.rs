@@ -3,6 +3,7 @@ pub mod storage;
 pub use storage::{IpfsStorage, IpfsSnapshot, SnapshotManifest, IpfsStats};
 
 use sha2::{Sha256, Digest};
+use bs58;
 
 /// Generate content identifier (CID) for data
 pub fn generate_cid(data: &[u8]) -> String {

@@ -2,7 +2,7 @@ pub mod detector;
 
 pub use detector::{VisualChangeDetector, VisualDiff, Region};
 
-use image::DynamicImage;
+use img_hash::image::DynamicImage;
 use std::path::Path;
 
 /// Capture a screenshot of a rendered web page
@@ -21,7 +21,7 @@ pub async fn capture_screenshot(url: &str) -> anyhow::Result<DynamicImage> {
 /// Generate perceptual hash for quick similarity checks
 pub fn generate_visual_hash(img: &DynamicImage) -> String {
     use img_hash::HasherConfig;
-    let hasher = HasherConfig::new().hash_size(16, 16);
+    let hasher = HasherConfig::new().hash_size(16, 16).to_hasher();
     let hash = hasher.hash_image(img);
     hash.to_base64()
 }

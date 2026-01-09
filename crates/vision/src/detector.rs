@@ -1,5 +1,5 @@
-use image::{DynamicImage, GenericImageView};
-use img_hash::{HasherConfig, ImageHash};
+use img_hash::image::DynamicImage;
+use img_hash::{HasherConfig, ImageHash, image::GenericImageView};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -38,8 +38,9 @@ impl VisualChangeDetector {
         img2: &DynamicImage,
     ) -> anyhow::Result<VisualDiff> {
         // Compute perceptual hashes
-        let hash1 = self.hasher.hash_image(img1);
-        let hash2 = self.hasher.hash_image(img2);
+        let hasher = self.hasher.to_hasher();
+        let hash1 = hasher.hash_image(img1);
+        let hash2 = hasher.hash_image(img2);
         
         let hash_distance = hash1.dist(&hash2);
         
@@ -171,7 +172,8 @@ impl VisualChangeDetector {
     ) -> anyhow::Result<bool> {
         // Simplified: Check if large blocks have moved
         // In production, use edge detection + feature matching
-        let hash_distance = self.hasher.hash_image(img1).dist(&self.hasher.hash_image(img2));
+        let hasher = self.hasher.to_hasher();
+        let hash_distance = hasher.hash_image(img1).dist(&hasher.hash_image(img2));
         
         // If perceptual hash is similar but pixel diff is high, likely a layout shift
         Ok(hash_distance < 10 && self.calculate_similarity(img1, img2)? > 0.3)

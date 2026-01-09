@@ -3,6 +3,7 @@ use ipfs_api_backend_hyper::{IpfsApi, IpfsClient, TryFromUri};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use tracing::{info, warn};
+use futures_util::{stream::StreamExt, TryStreamExt};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IpfsSnapshot {
@@ -27,7 +28,7 @@ impl IpfsStorage {
     pub async fn store_warc(&self, content: &[u8]) -> Result<String> {
         info!("Storing {} bytes to IPFS", content.len());
         
-        let cursor = Cursor::new(content);
+        let cursor = Cursor::new(content.to_vec());
         let response = self.client.add(cursor).await?;
         
         let cid = response.hash;
@@ -42,7 +43,7 @@ impl IpfsStorage {
         
         let data = self.client
             .cat(cid)
-            .map_ok(|chunk| chunk.to_vec())
+            .map(|chunk_res| chunk_res.map(|chunk| chunk.to_vec()))
             .try_concat()
             .await?;
         
@@ -85,12 +86,10 @@ impl IpfsStorage {
     pub async fn stats(&self) -> Result<IpfsStats> {
         let repo_stats = self.client.stats_repo().await?;
         
-        Ok(IpfsStats {
-            num_objects: repo_stats.num_objects,
-            repo_size: repo_stats.repo_size,
-            storage_max: repo_stats.storage_max,
-        })
-    }
+                    Ok(IpfsStats {
+                        num_objects: repo_stats.num_objects,
+                        repo_size: repo_stats.repo_size,
+                    })    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -104,7 +103,6 @@ pub struct SnapshotManifest {
 pub struct IpfsStats {
     pub num_objects: u64,
     pub repo_size: u64,
-    pub storage_max: u64,
 }
 
 #[cfg(test)]
