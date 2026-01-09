@@ -33,7 +33,7 @@ pub fn extract_text(html_content: &str) -> ExtractionResult {
                 }).unwrap_or(false);
 
                 if !is_boilerplate {
-                    text_content.push_str(&text);
+                    text_content.push_str(text);
                     text_content.push(' ');
                 }
             }

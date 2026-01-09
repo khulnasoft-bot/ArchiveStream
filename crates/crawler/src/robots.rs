@@ -41,3 +41,9 @@ impl RobotsChecker {
         }
     }
 }
+
+impl Default for RobotsChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
