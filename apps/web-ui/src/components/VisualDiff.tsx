@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Columns, Layers, Maximize2, ImageIcon, Code } from "lucide-react";
 import html2canvas from "html2canvas";
 import pixelmatch from "pixelmatch";
-import { Diff as DomDiff } from "diff-dom"; // Import Diff
+import Diff from "diff-dom"; // Import Diff
 
 interface VisualDiffProps {
   url: string;

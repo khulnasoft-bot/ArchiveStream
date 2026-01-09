@@ -1,5 +1,6 @@
-FROM rust:1.78-slim-bookworm AS builder
+FROM rust:1.92.0-slim-bookworm AS builder
 WORKDIR /app
+RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY . .
 RUN cargo build --release --bin archive-crawler
 
