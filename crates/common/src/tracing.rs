@@ -53,7 +53,7 @@ pub fn shutdown_tracing() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tracing::{info, instrument};
+    use ::tracing::{info, instrument};
 
     #[instrument]
     fn example_traced_function(param: &str) {
