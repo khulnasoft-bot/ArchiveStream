@@ -47,12 +47,15 @@ docker-down:
 # Run database migrations
 migrate:
 	@if [ -z "$$DATABASE_URL" ]; then \
-		echo "Error: DATABASE_URL not set"; \
-		exit 1; \
+		echo "DATABASE_URL not set, attempting to use postgres service in infra/compose.yml"; \
+		DATABASE_URL="postgres://admin:password@localhost/archivestream"; \
+		export DATABASE_URL; \
 	fi
+	@echo "Ensuring docker-compose services are up for migration..."
+	docker-compose -f infra/compose.yml up -d postgres
 	@for migration in infra/migrations/*.sql; do \
 		echo "Running $$migration..."; \
-		psql $$DATABASE_URL < $$migration; \
+		docker-compose -f infra/compose.yml exec -T postgres psql $$DATABASE_URL < $$migration; \
 	done
 
 # Start development environment
