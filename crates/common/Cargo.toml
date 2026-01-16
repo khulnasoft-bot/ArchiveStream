@@ -12,3 +12,10 @@ url.workspace = true
 scraper.workspace = true
 anyhow.workspace = true
 sqlx.workspace = true
+tracing = "0.1"
+memmap2 = "0.9.4"
+opentelemetry = { version = "0.22" }
+opentelemetry_sdk = { version = "0.22", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.15", features = ["grpc-tonic", "trace"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-opentelemetry = "0.23"

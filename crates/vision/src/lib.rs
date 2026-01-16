@@ -1,27 +1,28 @@
 pub mod detector;
 
-pub use detector::{VisualChangeDetector, VisualDiff, Region};
+pub use detector::{Region, VisualChangeDetector, VisualDiff};
 
-use image::DynamicImage;
-use std::path::Path;
+use img_hash::image::DynamicImage;
 
 /// Capture a screenshot of a rendered web page
 /// This would integrate with headless browser (e.g., chromiumoxide)
-pub async fn capture_screenshot(url: &str) -> anyhow::Result<DynamicImage> {
+pub async fn capture_screenshot(_url: &str) -> anyhow::Result<DynamicImage> {
     // Placeholder - in production, use headless Chrome
     // Example with chromiumoxide:
     // let browser = Browser::default().await?;
     // let page = browser.new_page(url).await?;
     // let screenshot = page.screenshot(...).await?;
     // image::load_from_memory(&screenshot)
-    
-    Err(anyhow::anyhow!("Screenshot capture not implemented - requires headless browser"))
+
+    Err(anyhow::anyhow!(
+        "Screenshot capture not implemented - requires headless browser"
+    ))
 }
 
 /// Generate perceptual hash for quick similarity checks
 pub fn generate_visual_hash(img: &DynamicImage) -> String {
     use img_hash::HasherConfig;
-    let hasher = HasherConfig::new().hash_size(16, 16);
+    let hasher = HasherConfig::new().hash_size(16, 16).to_hasher();
     let hash = hasher.hash_image(img);
     hash.to_base64()
 }

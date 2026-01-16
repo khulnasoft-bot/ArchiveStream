@@ -1,9 +1,9 @@
-use opentelemetry::{global, trace::{Tracer, TracerProvider}, KeyValue};
+use opentelemetry::{global, KeyValue};
+use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{
     trace::{self as sdktrace, Sampler},
     Resource,
 };
-use opentelemetry_otlp::WithExportConfig;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Initialize OpenTelemetry tracing with Jaeger backend
@@ -22,13 +22,13 @@ pub fn init_tracing(service_name: &str) -> anyhow::Result<()> {
                 .with_resource(Resource::new(vec![
                     KeyValue::new("service.name", service_name.to_string()),
                     KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-                ]))
+                ])),
         )
         .install_batch(opentelemetry_sdk::runtime::Tokio)?;
 
     // Set up tracing subscriber with OpenTelemetry layer
     let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-    
+
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -49,7 +49,7 @@ pub fn shutdown_tracing() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tracing::{info, instrument};
+    use ::tracing::{info, instrument};
 
     #[instrument]
     fn example_traced_function(param: &str) {

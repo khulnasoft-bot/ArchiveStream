@@ -17,7 +17,8 @@ multihash = "0.19"
 
 # Content addressing
 sha2 = "0.10"
-base58 = "0.2"
+bs58 = "0.5.1"
+futures-util = "0.3"
 
 [dev-dependencies]
 tokio-test = "0.4"
